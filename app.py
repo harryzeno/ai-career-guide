@@ -6,102 +6,126 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Load OpenAI API Key from Environment Variable
+# Load API Key
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+print("OPENAI KEY LOADED:", bool(openai.api_key))
 
-# ------------------------
-# HOME ROUTE (TEST)
-# ------------------------
 
 @app.route("/")
 def home():
-    return "AI Career Guide API is running 🚀"
+    return "AI Career Guide API Running 🚀"
 
 
-# ------------------------
-# MAIN AI API ROUTE
-# ------------------------
+# -------------------------
+# MAIN AI ENGINE
+# -------------------------
 
 @app.route("/api/recommend", methods=["POST"])
-def career_guide():
+def ai_engine():
 
-    data = request.get_json()
+    try:
+        data = request.get_json()
 
-    interest = data.get("interest", [])
-    experience = data.get("experience", "")
-    skills = data.get("skills", [])
-
-    # ------------------------
-    # RULE BASED ENGINE (FAST)
-    # ------------------------
-
-    if experience == "beginner" and "automation" in interest:
-        base_career = "AI Automation Specialist"
-
-    elif experience == "advanced" and "python" in skills:
-        base_career = "Machine Learning Engineer"
-
-    else:
-        base_career = "Prompt Engineer"
+        interest = data.get("interest", [])
+        experience = data.get("experience", "")
+        skills = data.get("skills", [])
+        resume_text = data.get("resume", "")
 
 
-    # ------------------------
-    # GPT PROMPT
-    # ------------------------
+        # -------------------------
+        # Rule Based Baseline
+        # -------------------------
 
-    prompt = f"""
-User Profile:
-Experience: {experience}
+        if experience == "beginner" and "automation" in interest:
+            base_role = "AI Automation Specialist"
+        elif experience == "advanced" and "python" in skills:
+            base_role = "Machine Learning Engineer"
+        else:
+            base_role = "Prompt Engineer"
+
+
+        # -------------------------
+        # AI PROMPT
+        # -------------------------
+
+        prompt = f"""
+User Career Profile:
+
+Experience Level: {experience}
 Skills: {skills}
 Interests: {interest}
+Resume: {resume_text}
 
-Base career suggestion: {base_career}
+Target Role: {base_role}
 
-Generate:
+Generate response in JSON with keys:
 
-1) Short explanation (2 lines)
-2) Learning roadmap (5 steps)
-3) Time estimate to become job-ready
+career_summary
+learning_roadmap (5 steps)
+skill_gaps
+resume_improvements
+learning_resources
+job_ready_score (0-100)
+time_estimate
 """
 
 
-    # ------------------------
-    # OPENAI CALL
-    # ------------------------
+        ai_data = {
+            "career_summary": "AI unavailable",
+            "learning_roadmap": [],
+            "skill_gaps": [],
+            "resume_improvements": [],
+            "learning_resources": [],
+            "job_ready_score": 0,
+            "time_estimate": "Unknown"
+        }
 
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are an expert AI career advisor."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.6,
-            max_tokens=400
-        )
 
-        ai_reply = response.choices[0].message.content
+        # -------------------------
+        # OpenAI Call
+        # -------------------------
+
+        if openai.api_key:
+
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are an expert AI career coach. Return valid JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.6,
+                max_tokens=500
+            )
+
+            raw = response["choices"][0]["message"]["content"]
+
+            try:
+                import json
+                ai_data = json.loads(raw)
+            except:
+                ai_data["career_summary"] = raw
+
+
+        # -------------------------
+        # FINAL RESPONSE
+        # -------------------------
+
+        return jsonify({
+            "base_role": base_role,
+            "ai_results": ai_data,
+            "status": "success"
+        })
+
 
     except Exception as e:
-        print("OPENAI ERROR:", e)
-        ai_reply = "AI service temporarily unavailable."
+        print("SERVER ERROR:", e)
 
+        return jsonify({
+            "status": "error",
+            "message": "Backend crashed"
+        }), 500
 
-    # ------------------------
-    # FINAL RESPONSE
-    # ------------------------
-
-    return jsonify({
-        "rule_based_career": base_career,
-        "ai_recommendation": ai_reply,
-        "status": "success"
-    })
-
-
-# ------------------------
-# RUN SERVER
-# ------------------------
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
