@@ -1,13 +1,16 @@
 from flask import Flask, request, jsonify
+import openai
+import os
 
 app = Flask(__name__)
 
-# Health Check Route
+# Load API Key
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
 @app.route("/")
 def home():
     return "AI Career Guide API is running 🚀"
 
-# Career Recommendation API
 @app.route("/api/recommend", methods=["POST"])
 def career_guide():
 
@@ -17,27 +20,43 @@ def career_guide():
     experience = data.get("experience", "")
     skills = data.get("skills", [])
 
-    # RULE BASED LOGIC (Starter Engine)
+    # RULE ENGINE (FAST FILTER)
     if experience == "beginner" and "automation" in interest:
-        career = "AI Automation Specialist"
+        base_career = "AI Automation Specialist"
     elif experience == "advanced" and "python" in skills:
-        career = "Machine Learning Engineer"
-    elif "design" in interest:
-        career = "AI UI/UX Designer"
+        base_career = "Machine Learning Engineer"
     else:
-        career = "Prompt Engineer"
+        base_career = "Prompt Engineer"
 
-    roadmap = [
-        "Learn Python fundamentals",
-        "Understand AI basics",
-        "Practice small AI projects",
-        "Build portfolio",
-        "Apply for jobs/internships"
-    ]
+    # GPT PROMPT
+    prompt = f"""
+User info:
+Experience: {experience}
+Skills: {skills}
+Interests: {interest}
+
+Suggested base career: {base_career}
+
+Generate:
+1) Short explanation
+2) Learning roadmap (5 steps)
+3) Estimated time to job ready
+"""
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        ai_reply = response.choices[0].message.content
+
+    except Exception as e:
+        ai_reply = "AI service temporarily unavailable."
 
     return jsonify({
-        "recommended_career": career,
-        "roadmap": roadmap,
+        "rule_based_career": base_career,
+        "ai_recommendation": ai_reply,
         "status": "success"
     })
 
